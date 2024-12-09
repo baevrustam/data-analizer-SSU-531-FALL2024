@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Dataset Analyzer</h1>
+    <form id="uploadForm">
+        <input type="file" id="dataset" name="dataset" required />
+        <button type="submit">Upload and Analyze</button>
+    </form>
+
+   <div id="loading" style="display: none; text-align: center; margin-top: 20px;">
+    <img src="spinner.gif.gif" alt="Loading..." style="width: 50px; height: 50px;">
+    <p>Analyzing your dataset... Please wait.</p>
+</div>
+
+    <div id="results" style="display: none;"></div>
+
+    <div id="visualizations" style="display: none; margin: 20px auto; max-width: 800px;">
+        <h2>Visualizations</h2>
+        <canvas id="datasetChart" style="margin-bottom: 40px;"></canvas>
+        <canvas id="analysisChart"></canvas>
+    </div>
+
+    <script>
+        const form = document.getElementById("uploadForm");
+        const resultsDiv = document.getElementById("results");
+        const loadingDiv = document.getElementById("loading");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append("dataset", document.getElementById("dataset").files[0]);
+
+            resultsDiv.style.display = "none"; // Hide results
+            loadingDiv.style.display = "block"; // Show loading spinner
+
+            try {
+                const response = await fetch("http://localhost:3000/upload", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                loadingDiv.style.display = "none"; // Hide loading spinner
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    resultsDiv.innerHTML = `<p style='color:red;'>Error: ${errorData.error}</p>`;
+                    resultsDiv.style.display = "block";
+                    return;
+                }
+
+                const result = await response.json();
+                displayResults(result);
+            } catch (error) {
+                loadingDiv.style.display = "none"; // Hide loading spinner
+                resultsDiv.innerHTML = "<p style='color:red;'>Error analyzing dataset.</p>";
+                resultsDiv.style.display = "block";
+            }
+        });
+
+            function displayResults(data) {
+				resultsDiv.style.display = "block"; // Show results
+				resultsDiv.innerHTML = `
+					<h2>Analysis Results</h2>
+					<h3>Top 5 Items</h3>
+					<ul>${Object.entries(data.top_items)
+						.map(([item, quantity]) => `<li>${item}: ${quantity}</li>`)
+						.join("")}</ul>
+					<h3>Revenue by Transaction Type</h3>
+					<ul>${Object.entries(data.transaction_revenue)
+						.map(([type, revenue]) => `<li>${type}: $${(revenue * 0.012).toFixed(2)}</li>`)
+						.join("")}</ul>
+					<h3>Model R² Score</h3>
+					<p>${data.r2_score.toFixed(2)}</p>
+					<h3>Conclusions and Recommendations</h3>
+					${formatRecommendations(data.gpt_conclusion)}
+				`;
+
+				// Display visualizations
+				displayDatasetVisualization(data);
+				displayAnalysisVisualization(data);
+				document.getElementById('visualizations').style.display = 'block';
+			}
+
+    function formatRecommendations(conclusionText) {
+        // Split the conclusion text into meaningful paragraphs
+        const paragraphs = conclusionText.split("\n").map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph);
+
+        // Format each paragraph as HTML
+        return paragraphs.map((p) => `<p>${p}</p>`).join("");
+    }
+
+        function displayDatasetVisualization(data) {
+            const ctx = document.getElementById('datasetChart').getContext('2d');
+
+            const items = Object.keys(data.top_items);
+            const quantities = Object.values(data.top_items);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: items,
+                    datasets: [
+                        {
+                            label: 'Quantity Sold',
+                            data: quantities,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Top Items by Quantity Sold' },
+                    },
+                    scales: {
+                        y: { beginAtZero: true },
+                    },
+                },
+            });
+        }
+
+        function displayAnalysisVisualization(data) {
+            const ctx = document.getElementById('analysisChart').getContext('2d');
+
+            const transactionTypes = Object.keys(data.transaction_revenue);
+            const revenues = Object.values(data.transaction_revenue).map((r) => r * 0.012); // Convert to USD
+
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: transactionTypes,
+                    datasets: [
+                        {
+                            label: 'Revenue by Transaction Type',
+                            data: revenues,
+                            backgroundColor: ['rgba(75, 192, 192, 0.6)', 'rgba(255, 159, 64, 0.6)'],
+                            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 159, 64, 1)'],
+                            borderWidth: 1,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        title: { display: true, text: 'Revenue by Transaction Type (in USD)' },
+                    },
+                },
+            });
+        }
+    </script>
+</body>
+</html>
